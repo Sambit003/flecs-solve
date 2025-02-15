@@ -57,6 +57,7 @@ struct ecs_id_record_t {
     ecs_id_record_elem_t first;   /* (R, *) */
     ecs_id_record_elem_t second;  /* (*, O) */
     ecs_id_record_elem_t trav;    /* (*, O) with only traversable relationships */
+    ecs_id_record_elem_t non_fragmenting; /* All non-fragmenting ids */
 
     /* Parent id record. For pair records the parent is the (R, *) record. */
     ecs_id_record_t *parent;
@@ -131,6 +132,11 @@ ecs_table_record_t* flecs_id_record_get_table(
 
 /* Init sparse storage */
 void flecs_id_record_init_sparse(
+    ecs_world_t *world,
+    ecs_id_record_t *idr);
+
+/* Init non-fragmenting component id */
+void flecs_id_record_init_dont_fragment(
     ecs_world_t *world,
     ecs_id_record_t *idr);
 

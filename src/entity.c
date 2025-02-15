@@ -635,6 +635,45 @@ void flecs_sparse_on_remove(
     }
 }
 
+void flecs_entity_remove_non_fragmenting(
+    ecs_world_t *world,
+    ecs_entity_t e,
+    ecs_record_t *r)
+{
+    if (!r) {
+        r = flecs_entities_get(world, e);
+    }
+
+    if (!r || !(r->row & EcsEntityHasDontFragment)) {
+        return;
+    }
+
+    ecs_id_record_t *cur = world->idr_non_fragmenting_head;
+    while (cur) {
+        ecs_assert(cur->flags & EcsIdIsSparse, ECS_INTERNAL_ERROR, NULL);
+        if (cur->sparse) {
+            void *ptr = flecs_sparse_get_any(cur->sparse, 0, e);
+            if (ptr) {
+                const ecs_type_info_t *ti = cur->type_info;
+                ecs_xtor_t dtor = ti->hooks.dtor;
+                ecs_iter_action_t on_remove = ti->hooks.on_remove;
+                if (on_remove) {
+                    flecs_invoke_hook(world, NULL, NULL, 1, 0,
+                        &e, cur->id, ti, EcsOnRemove, on_remove);
+                }
+                if (dtor) {
+                    dtor(ptr, 1, ti);
+                }
+                flecs_sparse_remove_fast(cur->sparse, 0, e);
+            }
+        }
+
+        cur = cur->non_fragmenting.next;
+    }
+
+    r->row &= ~EcsEntityHasDontFragment;
+}
+
 static
 void flecs_union_on_add(
     ecs_world_t *world,
@@ -711,6 +750,14 @@ void flecs_notify_on_add(
 
         if (sparse && (diff_flags & EcsTableHasSparse)) {
             flecs_sparse_on_add(world, table, row, count, added, construct);
+            if (diff_flags & EcsTableHasDontFragment) {
+                int32_t i;
+                const ecs_entity_t *entities = ecs_table_entities(table);
+                for (i = row; i < (row + count); i ++) {
+                    ecs_record_t *r = flecs_entities_get(world, entities[i]);
+                    r->row |= EcsEntityHasDontFragment;
+                }
+            }
         }
 
         if (diff_flags & EcsTableHasUnion) {
@@ -975,8 +1022,10 @@ void flecs_commit(
         /* If source and destination table are the same no action is needed *
          * However, if a component was added in the process of traversing a
          * table, this suggests that a union relationship could have changed. */
-        if (src_table && src_table->flags & EcsTableHasUnion) {
-            diff->added_flags |= EcsIdIsUnion;
+        ecs_flags32_t non_fragment_flags = 
+            src_table->flags & (EcsTableHasUnion|EcsTableHasDontFragment);
+        if (src_table && non_fragment_flags) {
+            diff->added_flags |= non_fragment_flags;
             flecs_notify_on_add(world, src_table, src_table, 
                 ECS_RECORD_TO_ROW(record->row), 1, diff, evt_flags, 0, 
                     construct, true);
@@ -2371,6 +2420,8 @@ void ecs_clear(
         if (r->row & EcsEntityIsTraversable) {
             flecs_table_traversable_add(table, -1);
         }
+
+        flecs_entity_remove_non_fragmenting(world, entity, NULL);
     }    
 
     flecs_defer_end(world, stage);
@@ -2932,6 +2983,9 @@ void ecs_delete(
                     flecs_table_traversable_add(table, -1);
                 }
             }
+
+            flecs_entity_remove_non_fragmenting(world, entity, r);
+
             /* Merge operations before deleting entity */
             flecs_defer_end(world, stage);
             flecs_defer_begin(world, stage);

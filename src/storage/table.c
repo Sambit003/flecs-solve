@@ -881,6 +881,8 @@ void flecs_table_dtor_all(
             ecs_assert(!e || ecs_is_valid(world, e), 
                 ECS_INTERNAL_ERROR, NULL);
 
+            flecs_entity_remove_non_fragmenting(world, e, NULL);
+
             if (is_delete) {
                 flecs_entities_remove(world, e);
                 ecs_assert(ecs_is_valid(world, e) == false, 
@@ -901,6 +903,7 @@ void flecs_table_dtor_all(
             for (i = row; i < end; i ++) {
                 ecs_entity_t e = entities[i];
                 ecs_assert(!e || ecs_is_valid(world, e), ECS_INTERNAL_ERROR, NULL);
+                flecs_entity_remove_non_fragmenting(world, e, NULL);
                 flecs_entities_remove(world, e);
                 ecs_assert(!ecs_is_valid(world, e), ECS_INTERNAL_ERROR, NULL);
             } 
@@ -909,6 +912,7 @@ void flecs_table_dtor_all(
                 ecs_entity_t e = entities[i];
                 ecs_assert(!e || ecs_is_valid(world, e), ECS_INTERNAL_ERROR, NULL);
                 ecs_record_t *record = flecs_entities_get(world, e);
+                flecs_entity_remove_non_fragmenting(world, e, record);
                 record->table = NULL;
                 record->row = record->row & ECS_ROW_FLAGS_MASK;
                 (void)e;
